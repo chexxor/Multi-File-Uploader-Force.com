@@ -2,7 +2,7 @@
 	j$(document).ready(function() {
 		//Event listener for click of Upload button
 		j$("#uploadButton").click(function() {
-			FileUploader.handleClickUpload();
+			FileUploaderApp.handleClickUpload();
 		});
 
 		//Event listener to clear upload details/status bars once upload is complete
@@ -11,14 +11,6 @@
 		});
 	});
 	
-	// The FileUploader app attaches to the following elements:
-	// .uploadBox
-	// .uploadBox input
-	// .uploadBox button
-	// .upload .statusPercent
-	// .upload .name
-	// .upload .percentComplete
-	// .upload .statusBarPercent
 	
 	// Namespace for the FileUploader app
 	var FileUploader = {};
@@ -29,105 +21,23 @@
 	FileUploader.CHUNK_SIZE = 60000;//Must be evenly divisible by 3, if not, data corruption will occur
 	FileUploader.FILE_INPUT_ID = 'filesInput';
 
-	// Event handler for the Upload button
-	FileUploader.handleClickUpload = function() {
-		// Get the file(s) from the input field
-		var selectedFiles = document.getElementById(FileUploader.FILE_INPUT_ID).files;
+	
 
-		// Only proceed if there are files selected
-		if (selectedFiles.length === 0) {
-			alert('Please select a file!');
-			return;
-		}
-
-		// Disable inputs and buttons during the upload process
-		j$(".uploadBox input").attr("disabled", "disabled");
-		j$(".uploadBox button").attr({
-			disabled: "disabled",
-			class: "btnDisabled"
-		});
-
-		// Build out the upload divs for each file selected
-		var uploadMarkup = '';
-		for (i = 0; i < selectedFiles.length; i++) {
-			//Determine file display size
-			if (selectedFiles[i].size < 1000000) {
-				var displaySize = Math.floor(selectedFiles[i].size/1000) + 'KB';
-			} else {
-				var displaySize  = Math.round((selectedFiles[i].size / 1000000)*10)/10 + 'MB';
-			}
-
-			// Create a div for each file to upload. Store information on elements, such as file size and status bar.
-			// data-status tracks status of upload
-			// data-index used to correspond these upload boxes to records in the files array
-			uploadMarkup += '<div class="upload" data-status="pending" data-index="' + i + '">';
-			uploadMarkup += '<div class="fileName"><span class="name">' + selectedFiles[i].name + '</span> - ' + displaySize + '</div>';
-			uploadMarkup += '<div class="percentComplete">0%</div>'
-			uploadMarkup += '<div class="clear"/>';
-			uploadMarkup += '<div class="statusBar">';
-			uploadMarkup += '<div class="statusBarPercent"/>';
-			uploadMarkup += '</div>';
-			uploadMarkup += '</div>';
-		}
-
-		//Add markup to the upload box
-		j$('.uploadBox').append(uploadMarkup);
-
-		//Once elements have been added to the page representing the uploads, start the actual upload process
-		console.log('selectedFiles', selectedFiles);
-		FileUploader.uploadPendingFiles(selectedFiles);
-	}
-
-	FileUploader.uploadPendingFiles = function(pSelectedFiles) {
-		console.log('pSelectedFiles', pSelectedFiles);
+	FileUploader.uploadFiles = function(pSelectedFiles, pOnProgress, pOnSuccess, pOnError) {
 		var selectedFiles = pSelectedFiles;
 		// Files remaining to upload are marked by a custom data attribute named 'data-status'
 		var pendingFilesElements = j$(".upload[data-status='pending']");
 
 		if (pendingFilesElements.length != 0) {
 			//Based on index of the div, get correct file from files array
-			//var currentFile = selectedFiles[pendingFilesElements.attr('data-index')];
 			for (var i = 0; i < selectedFiles.length; i++) {
-				var fileNumber = i;
-				var fileToUpload = selectedFiles[fileNumber];
-				console.log('fileToUpload', fileToUpload);
+				var fileIndex = i;
+				var fileToUpload = selectedFiles[fileIndex];
 				FileUploader.uploadFile(
-						fileToUpload,
-						fileNumber,
-						pendingFilesElements,
-						function(pChunkUploaded, pUploadingFile, pFileNumberUploading) {//onProgress
-							//Update the percent of the status bar and percent, first determine percent complete
-							var chunkStartStopRange = pChunkUploaded[0].split('-'); //get first index range '0-179999' -> ['0','179999']
-							var chunkUploadedStopByte = parseInt(chunkStartStopRange[1]); //179999
-							var percentComplete = Math.round((chunkUploadedStopByte / pUploadingFile.size) * 100);
-							console.log('percentComplete', percentComplete);
-							console.log('pendingFilesElements', pendingFilesElements);
-							//TODO: Make this better encapsulated. Why doesn't this work?
-							//var currentFileElement = pendingFilesElements.find("div[data-index=" + pFileNumberUploading + "]");
-							var currentFileElement = j$("div[data-index=" + pFileNumberUploading + "]");
-							console.log('currentFileElement', currentFileElement);
-							currentFileElement.find(".percentComplete").text(percentComplete + '%');
-							currentFileElement.find(".statusBarPercent").css('width', percentComplete + '%');
-						},
-						function(pAttachmentId, pUploadedFile, pFileNumberUploaded) {//onSuccess
-							//This file has completed, all byte chunks have been uploaded, set status on the div to complete
-							console.log('pAttachmentId', pAttachmentId);
-							console.log('pUploadedFile', pUploadedFile);
-							console.log('pFileNumberUploaded', pFileNumberUploaded);
-							var currentFileElement = j$("div[data-index=" + pFileNumberUploaded + "]");
-							currentFileElement.attr('data-status','complete');
-
-							//Change name of file to link of uploaded attachment
-							currentFileElement.find(".name").html('<a href="' + FileUploader.VIEW_URL + pAttachmentId + '" target="_blank">' + pUploadedFile.name + '</a>');
-
-						},
-						function() {//onError
-							//Add classes to reflect error
-							pendingFilesElements.attr('data-status','complete');
-							pendingFilesElements.addClass('uploadError');
-							pendingFilesElements.find(".statusPercent").addClass('statusPercentError');
-							pendingFilesElements.attr('title', event.message);
-						}
+						{"file":fileToUpload, "index":fileIndex},
+						pOnProgress,
+						pOnSuccess,
+						pOnError
 				);
 			}
 
@@ -143,23 +53,26 @@
 	}
 	
 	// Uploads a single file.
-	FileUploader.uploadFile = function(pFileToUpload, pFileNumber, pPendingFilesElements, onProgress, onSuccess, onError) {
+	FileUploader.uploadFile = function(pFileToUploadInfo, pOnProgress, pOnSuccess, pOnError) {
 	
-		var fileToUpload = pFileToUpload;
-		var fileNumber = pFileNumber;
-		var pendingFilesElements = pPendingFilesElements;
+		var onProgress = pOnProgress;
+		var onSuccess = pOnSuccess;
+		var onError = pOnError;
+		var fileToUploadInfo = pFileToUploadInfo;
+		var fileToUpload = pFileToUploadInfo["file"];
+		var fileIndex = pFileToUploadInfo["fileIndex"];
 		var byteChunkPattern = FileUploader.createChunkPatternForFile(fileToUpload);
 
 		// The attachmentId parameter is '' because we are not appending to an existing Attachment.
 		FileUploader.uploadFileUsingChunkingPattern(
 				'',
-				fileToUpload,
+				fileToUploadInfo,
 				byteChunkPattern,
-				function(chunkUploaded) {//onProgress
-					onProgress(chunkUploaded, pFileToUpload, fileNumber);
+				function(pFileUploadInfo, pChunkUploaded) {//onProgress
+					onProgress(pFileUploadInfo, pChunkUploaded);
 				},
-				function(pAttachmentId, pUploadedFile) {//onSuccess
-					onSuccess(pAttachmentId, pUploadedFile);
+				function(pUploadedFileInfo) {//onSuccess
+					onSuccess(pUploadedFileInfo);
 				},
 				function() {//onError
 					onError();
@@ -203,27 +116,31 @@
 	}
 
 	// Uploads a chunk of bytes.
-	// If an attachmentId is specified, the bytes will be appended to that attachment record.
-	FileUploader.uploadFileUsingChunkingPattern = function(pAttachmentId, pFileToUpload, byteChunkPattern, onProgress, onSuccess, onError) {
+	// If an recordId is specified, the bytes will be appended to that attachment record.
+	FileUploader.uploadFileUsingChunkingPattern = function(pRecordId, pFileToUploadInfo, pByteChunkPattern, pOnProgress, pOnSuccess, pOnError) {
 		
-		var attachmentId = pAttachmentId;
-		var fileToUpload = pFileToUpload;
-		var progress = onProgress;
+		var recordId = pRecordId;
+		var fileToUploadInfo = pFileToUploadInfo;
+		var fileToUpload = pFileToUploadInfo["file"];
+		var onProgress = pOnProgress;
+		var onSuccess = pOnSuccess;
+		var onError = pOnError;
 		
 		//Proceed if there are still values in the byteChunkPattern, if none, all piece of the file have been uploaded
-		if (byteChunkPattern.length > 0) {
+		if (pByteChunkPattern.length > 0) {
 			
 			//Create blobChunk to send to FileReader.
-			var blobChunk = FileUploader.sliceChunkFromFileUsingChunkingPattern(fileToUpload, byteChunkPattern);
+			var blobChunk = FileUploader.sliceChunkFromFileUsingChunkingPattern(fileToUpload, pByteChunkPattern);
 
 			var reader = new FileReader();
 
 			//Create a reader.onload function, which is called after reader activity.
 			reader.onloadend = function(evt) {
-			
+				
+				var insideFileToUploadInfo = fileToUploadInfo;
+				
 				if (evt.target.readyState != FileReader.DONE) {
 					//Error handling for bad read
-					//alert('Could not read file');
 					error(evt, 'Could not read file.');
 				}
 				
@@ -231,35 +148,42 @@
 				//window.btoa currently on support by some browsers
 				//TODO: What should we do if window.btoa is not supported?
 				var base64value = window.btoa(evt.target.result);
-				var byteChunkPatternToUpload = byteChunkPattern;
+				var byteChunkPatternToUpload = pByteChunkPattern;
 
 				//Use JS remoting to send the base64 encoded chunk for uploading
 				FileUploadController.attachBlob(parentId,
-												attachmentId,
+												recordId,
 												fileToUpload.name,
 												fileToUpload.type,
 												base64value,
 												function(result, event) {
 
+					var uploadedFileInfo = insideFileToUploadInfo;
 					var uploadedByteChunkPattern = byteChunkPatternToUpload;
 					//Proceed if there were no errors with the remoting call
 					if (event.status == true) {
-					
-						progress(uploadedByteChunkPattern);
+						var fileUploadInfo = {"file": uploadedFileInfo["file"], "index":uploadedFileInfo["index"]};
+						onProgress(fileUploadInfo, uploadedByteChunkPattern);
 						
 						//Remove the chunk pattern for the piece just uploaded.
-						byteChunkPattern.shift();
+						pByteChunkPattern.shift();
 
-						//All subsequent file chunks will be appended to this Attachment.
-						var attachmentId = result;
+						//All subsequent file chunks will be appended to this record.
+						var recordId = result;
 
 						//Call uploadFileUsingChunkingPattern to upload the next piece of the file
-						FileUploader.uploadFileUsingChunkingPattern(attachmentId, fileToUpload, byteChunkPattern, onProgress, onSuccess, onError);
-						
+						FileUploader.uploadFileUsingChunkingPattern(recordId, uploadedFileInfo, pByteChunkPattern, onProgress, onSuccess, onError);
 						
 					} else {
 						//Something broke in Javascript remoting call
-						onError(event, 'Error is Javascript Remoting call.');
+						var uploadError = {
+								"errorMessage":"Error in Javascript Remoting call.",
+								"result":result,
+								"event":event};
+						//TODO: Why is this object not passed through to the user callback?
+						//  It has value here, but is undefined on user end.
+						console.log('uploadError', uploadError);
+						onError(uploadError);
 					}
 				});
 			};
@@ -268,23 +192,133 @@
 			reader.readAsBinaryString(blobChunk);
 
 		} else {
-			onSuccess(attachmentId, fileToUpload);
+			//No more byte chunks to send. The entire file has been sent.
+			var fileUploadInfo = {
+					"recordid": pRecordId,
+					"file":pFileToUploadInfo["file"],
+					"fileIndex":pFileToUploadInfo["index"]};
+			onSuccess(fileUploadInfo);
 		}
 	}
 	
-	FileUploader.sliceChunkFromFileUsingChunkingPattern = function(currentFile, byteChunkPattern) {
+	FileUploader.sliceChunkFromFileUsingChunkingPattern = function(pCurrentFile, pByteChunkPattern) {
 		//Determine the byte range that needs to uploaded, if byteChunkPattern is like... ['0-179999','180000-359999']
-		var indexes = byteChunkPattern[0].split('-'); //get first index range '0-179999' -> ['0','179999']
+		var indexes = pByteChunkPattern[0].split('-'); //get first index range '0-179999' -> ['0','179999']
 		var startByte = parseInt(indexes[0]); //0
 		var stopByte = parseInt(indexes[1]); //179999
 		var blobChunk;
 		
 		//Slice the part of the file we want to upload, currentFile variable is set in checkForUploads() method that is called before this method
-		if (currentFile.webkitSlice) {
-			blobChunk = currentFile.webkitSlice(startByte , stopByte + 1);
-		} else if (currentFile.mozSlice) {
-			blobChunk = currentFile.mozSlice(startByte , stopByte + 1);
+		if (pCurrentFile.webkitSlice) {
+			blobChunk = pCurrentFile.webkitSlice(startByte , stopByte + 1);
+		} else if (pCurrentFile.mozSlice) {
+			blobChunk = pCurrentFile.mozSlice(startByte , stopByte + 1);
 		}
 		
 		return blobChunk;
+	}
+	
+	
+	/******************************************************************/
+	
+	// The FileUploader app attaches to the following elements:
+	// .uploadBox
+	// .uploadBox input
+	// .uploadBox button
+	// .upload .statusPercent
+	// .upload .name
+	// .upload .percentComplete
+	// .upload .statusBarPercent
+	
+	var FileUploaderApp = {};
+	
+	FileUploaderApp.onProgress = function(pFileUploadInfo, pChunkUploaded) {
+		var fileUploading = pFileUploadInfo["file"];
+		var fileIndexUploading = pFileUploadInfo["index"];
+		var chunkUploaded = pChunkUploaded;
+	
+		//Update the percent of the status bar and percent, first determine percent complete
+		var chunkStartStopRange = pChunkUploaded[0].split('-'); //get first index range '0-179999' -> ['0','179999']
+		var chunkUploadedStopByte = parseInt(chunkStartStopRange[1]); //179999
+		var percentComplete = Math.round((chunkUploadedStopByte / fileUploading.size) * 100);
+		
+		//TODO: Make this better encapsulated. Why doesn't this work?
+		var currentFileElement = j$("div[data-index=" + fileIndexUploading + "]");
+		currentFileElement.find(".percentComplete").text(percentComplete + '%');
+		currentFileElement.find(".statusBarPercent").css('width', percentComplete + '%');
+	}
+	
+	FileUploaderApp.onSuccess = function(pFileUploadInfo) {
+		var recordId = pFileUploadInfo["recordId"];
+		var fileUploaded = pFileUploadInfo["file"];
+		var fileIndexUploaded = pFileUploadInfo["index"];
+		
+		//This file has completed, all byte chunks have been uploaded, set status on the div to complete
+		var currentFileElement = j$("div[data-index=" + fileIndexUploaded + "]");
+		currentFileElement.attr('data-status','complete');
+
+		//Change name of file to link of uploaded attachment
+		currentFileElement.find(".name").html('<a href="' + FileUploader.VIEW_URL + recordId + '" target="_blank">' + fileUploaded.name + '</a>');
+	}
+	
+	FileUploaderApp.onError = function(pFileUploadErrorInfo) {
+		console.log('onError', pFileUploadErrorInfo);
+		var errorMessage = pFileUploadErrorInfo["errorMessage"];
+		var uploadResult = pFileUploadErrorInfo["result"];
+		var uploadEvent = pFileUploadErrorInfo["event"];
+		
+		//Add classes to reflect error
+		pendingFilesElements.attr('data-status','complete');
+		pendingFilesElements.addClass('uploadError');
+		pendingFilesElements.find(".statusPercent").addClass('statusPercentError');
+		pendingFilesElements.attr('title', uploadEvent.message);
+	}
+	
+	// Event handler for the Upload button
+	FileUploaderApp.handleClickUpload = function() {
+	
+		// Get the file(s) from the input field
+		var selectedFiles = document.getElementById(FileUploader.FILE_INPUT_ID).files;
+
+		// Only proceed if there are files selected
+		if (selectedFiles.length === 0) {
+			alert('Please select a file!');
+			return;
+		}
+
+		// Disable inputs and buttons during the upload process
+		j$(".uploadBox input").attr("disabled", "disabled");
+		j$(".uploadBox button").attr({
+			disabled: "disabled",
+			class: "btnDisabled"
+		});
+
+		// Build out the upload divs for each file selected
+		var uploadMarkup = '';
+		for (i = 0; i < selectedFiles.length; i++) {
+			//Determine file display size
+			if (selectedFiles[i].size < 1000000) {
+				var displaySize = Math.floor(selectedFiles[i].size / 1000) + 'KB';
+			} else {
+				var displaySize  = Math.round((selectedFiles[i].size / 1000000) * 10) / 10 + 'MB';
+			}
+
+			// Create a div for each file to upload. Store information on elements, such as file size and status bar.
+			// data-status tracks status of upload
+			// data-index used to correspond these upload boxes to records in the files array
+			uploadMarkup += '<div class="upload" data-status="pending" data-index="' + i + '">';
+			uploadMarkup += '<div class="fileName"><span class="name">' + selectedFiles[i].name + '</span> - ' + displaySize + '</div>';
+			uploadMarkup += '<div class="percentComplete">0%</div>'
+			uploadMarkup += '<div class="clear"/>';
+			uploadMarkup += '<div class="statusBar">';
+			uploadMarkup += '<div class="statusBarPercent"/>';
+			uploadMarkup += '</div>';
+			uploadMarkup += '</div>';
+		}
+
+		//Add markup to the upload box
+		j$('.uploadBox').append(uploadMarkup);
+
+		//Once elements have been added to the page representing the uploads, start the actual upload process
+		FileUploader.uploadFiles(selectedFiles, FileUploaderApp.onProgress, FileUploaderApp.onSuccess, FileUploaderApp.onError);
 	}
