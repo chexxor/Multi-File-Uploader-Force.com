@@ -1,3 +1,47 @@
+
+
+	
+	
+	// Simple JavaScript Templating
+	// John Resig - http://ejohn.org/ - MIT Licensed
+	(function(){
+	  var cache = {};
+	  
+	  this.tmpl = function tmpl(str, data){
+		// Figure out if we're getting a template, or if we need to
+		// load the template - and be sure to cache the result.
+		var fn = !/\W/.test(str) ?
+			cache[str] = cache[str] ||
+			tmpl(document.getElementById(str).innerHTML) :
+
+			// Generate a reusable function that will serve as a template
+			// generator (and which will be cached).
+			new Function("obj",
+			"var p=[],print=function(){p.push.apply(p,arguments);};" +
+
+			// Introduce the data as local variables using with(){}
+			"with(obj){p.push('" +
+
+			// Convert the template into pure JavaScript
+			str
+			  .replace(/[\r\t\n]/g, " ")
+			  .split("<%").join("\t")
+			  .replace(/((^|%>)[^\t]*)'/g, "$1\r")
+			  .replace(/\t=(.*?)%>/g, "',$1,'")
+			  .split("\t").join("');")
+			  .split("%>").join("p.push('")
+			  .split("\r").join("\\'")
+			+ "');}return p.join('');");
+
+			// Provide some basic currying to the user
+			return data ? fn( data ) : fn;
+		};
+	})();
+	
+	
+
+
+
 	var j$ = jQuery.noConflict();
 	j$(document).ready(function() {
 		//Event listener for click of Upload button
@@ -25,6 +69,7 @@
 
 	FileUploader.uploadFiles = function(pSelectedFiles, pOnProgress, pOnSuccess, pOnError) {
 		var selectedFiles = pSelectedFiles;
+		console.log('selectedFiles', selectedFiles);
 		// Files remaining to upload are marked by a custom data attribute named 'data-status'
 		var pendingFilesElements = j$(".upload[data-status='pending']");
 
@@ -201,6 +246,7 @@
 		}
 	}
 	
+	// The sliceChunkFromFileUsingChunkingPattern function will slice a chunk out of the specified file and return it.
 	FileUploader.sliceChunkFromFileUsingChunkingPattern = function(pCurrentFile, pByteChunkPattern) {
 		//Determine the byte range that needs to uploaded, if byteChunkPattern is like... ['0-179999','180000-359999']
 		var indexes = pByteChunkPattern[0].split('-'); //get first index range '0-179999' -> ['0','179999']
@@ -232,6 +278,7 @@
 	
 	var FileUploaderApp = {};
 	
+	// This onProgress function will be called whenever a chunk of a file is uploaded.
 	FileUploaderApp.onProgress = function(pFileUploadInfo, pChunkUploaded) {
 		var fileUploading = pFileUploadInfo["file"];
 		var fileIndexUploading = pFileUploadInfo["index"];
@@ -248,6 +295,7 @@
 		currentFileElement.find(".statusBarPercent").css('width', percentComplete + '%');
 	}
 	
+	// This onSuccess function will be called whenever a single file is successfully uploaded.
 	FileUploaderApp.onSuccess = function(pFileUploadInfo) {
 		var recordId = pFileUploadInfo["recordId"];
 		var fileUploaded = pFileUploadInfo["file"];
@@ -261,6 +309,7 @@
 		currentFileElement.find(".name").html('<a href="' + FileUploader.VIEW_URL + recordId + '" target="_blank">' + fileUploaded.name + '</a>');
 	}
 	
+	// This onError function will be called whenever an error occurs when uploading a chunk.
 	FileUploaderApp.onError = function(pFileUploadErrorInfo) {
 		console.log('onError', pFileUploadErrorInfo);
 		var errorMessage = pFileUploadErrorInfo["errorMessage"];
@@ -268,10 +317,21 @@
 		var uploadEvent = pFileUploadErrorInfo["event"];
 		
 		//Add classes to reflect error
+		j$();
+		//TODO: Make this use jQuery or something to update the upload info boxes on error.
+		/*
 		pendingFilesElements.attr('data-status','complete');
 		pendingFilesElements.addClass('uploadError');
 		pendingFilesElements.find(".statusPercent").addClass('statusPercentError');
 		pendingFilesElements.attr('title', uploadEvent.message);
+		*/
+	}
+	
+	FileUploaderApp.handleDragOver = function(evt) {
+		console.log('handleDragOver', evt);
+		evt.stopPropagation();
+		evt.preventDefault();
+		evt.dataTransfer.dropEffect = 'copy';
 	}
 	
 	// Event handler for the Upload button
@@ -280,6 +340,7 @@
 		// Get the file(s) from the input field
 		var selectedFiles = document.getElementById(FileUploader.FILE_INPUT_ID).files;
 
+		console.log('selectedFiles', selectedFiles);
 		// Only proceed if there are files selected
 		if (selectedFiles.length === 0) {
 			alert('Please select a file!');
@@ -294,30 +355,31 @@
 		});
 
 		// Build out the upload divs for each file selected
-		var uploadMarkup = '';
 		for (i = 0; i < selectedFiles.length; i++) {
+			var error = '';
+			var displaySize = '';
+			var selectedFile = selectedFiles[i];
 			//Determine file display size
-			if (selectedFiles[i].size < 1000000) {
-				var displaySize = Math.floor(selectedFiles[i].size / 1000) + 'KB';
+			//Catch any files that are too large.
+			if (selectedFile.size > 5242880) {
+				displaySize = '>5MB';
+				error = 'Error: Too large - max. size 5MB';
+				//TODO: Can we remove this file from the list somehow? I can't figure out how.
+			} else if (selectedFile.size < 1000000) {
+				displaySize = Math.floor(selectedFile.size / 1000) + 'KB';
 			} else {
-				var displaySize  = Math.round((selectedFiles[i].size / 1000000) * 10) / 10 + 'MB';
+				displaySize = Math.round((selectedFile.size / 1000000) * 10) / 10 + 'MB';
 			}
-
-			// Create a div for each file to upload. Store information on elements, such as file size and status bar.
-			// data-status tracks status of upload
-			// data-index used to correspond these upload boxes to records in the files array
-			uploadMarkup += '<div class="upload" data-status="pending" data-index="' + i + '">';
-			uploadMarkup += '<div class="fileName"><span class="name">' + selectedFiles[i].name + '</span> - ' + displaySize + '</div>';
-			uploadMarkup += '<div class="percentComplete">0%</div>'
-			uploadMarkup += '<div class="clear"/>';
-			uploadMarkup += '<div class="statusBar">';
-			uploadMarkup += '<div class="statusBarPercent"/>';
-			uploadMarkup += '</div>';
-			uploadMarkup += '</div>';
+			
+			var uploadMarkup = tmpl("uploadItemTmpl", {"index":i, "file":selectedFile, "displaySize":displaySize, "error": error});
+			
+			//Add markup to the upload box
+			j$('.uploadBox').append(uploadMarkup);
 		}
 
-		//Add markup to the upload box
-		j$('.uploadBox').append(uploadMarkup);
+		//TODO: Move this dragover bind to somewhere else.
+		j$('.uploadBox').bind('dragover', FileUploaderApp.handleDragOver);
+		j$('.uploadBox').bind('drop', FileUploaderApp.handleClickUpload);
 
 		//Once elements have been added to the page representing the uploads, start the actual upload process
 		FileUploader.uploadFiles(selectedFiles, FileUploaderApp.onProgress, FileUploaderApp.onSuccess, FileUploaderApp.onError);

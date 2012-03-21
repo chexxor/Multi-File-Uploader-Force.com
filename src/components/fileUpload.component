@@ -5,8 +5,24 @@
     <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"/>
     <script type="text/javascript" src="{!$Resource.FileUploadJS}"/>
     
+    <!--
+    The template to use for each uploading item.
+    It is currently given 'index', 'file', and 'displaySize' as parameters.
+    -->
+    <script type="text/html" id="uploadItemTmpl">
+        <div class="upload" data-status="pending" data-index="<%=index%>">
+            <div class="fileName"><span class="name"><%=file.name%></span> - <%=displaySize%> <%=error%></div>
+            <div class="percentComplete">0%</div>
+            <div class="clear"/>
+            <div class="statusBar">
+                <div class="statusBarPercent"/>
+            </div>
+        </div>
+    </script>
+    
     <script type="text/javascript">
-    	var parentId = '{!parentId}'; //Will be used by FileUploadJS.js but must be declared here. Static resources don't support dynamic values.
+        //Will be used by FileUploadJS.js but must be declared here. Static resources don't support dynamic values.
+        var parentId = '{!parentId}';
     </script>
     
     <div class="uploadBox">
